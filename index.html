@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NFT Marketplace</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .section {
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 20px;
+        }
+        input, button {
+            margin: 10px 0;
+            padding: 10px;
+            width: 100%;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #connectWallet {
+            background-color: #2196F3;
+        }
+        #connectWallet:hover {
+            background-color: #1976D2;
+        }
+        #listingsContainer {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .nft-listing {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NFT Marketplace</h1>
+        
+        <div class="section">
+            <button id="connectWallet">Connect Wallet</button>
+            <p id="walletStatus">Not Connected</p>
+        </div>
+
+        <div class="section">
+            <h2>List NFT</h2>
+            <input type="text" id="nftContractAddress" placeholder="NFT Contract Address">
+            <input type="number" id="tokenId" placeholder="Token ID">
+            <input type="number" id="listPrice" placeholder="Price (ETH)">
+            <button id="listNFT">List NFT</button>
+        </div>
+
+        <div class="section">
+            <h2>Buy NFT</h2>
+            <input type="number" id="listingId" placeholder="Listing ID">
+            <input type="number" id="buyPrice" placeholder="Price (ETH)">
+            <button id="buyNFT">Buy NFT</button>
+        </div>
+
+        <div class="section">
+            <h2>Current Listings</h2>
+            <div id="listingsContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        // Contract ABI and Address (replace with your actual deployed contract details)
+        const CONTRACT_ABI = [
+            // Paste the ABI generated when deploying the contract
+            {"inputs": [], "name": "listNFT", "type": "function"},
+            {"inputs": [], "name": "buyNFT", "type": "function"}
+        ];
+        const CONTRACT_ADDRESS = '0x1234567890123456789012345678901234567890';
+
+        let web3;
+        let contract;
+        let userAccount;
+
+        // Connect Wallet
+        document.getElementById('connectWallet').addEventListener('click', async () => {
+            if (window.ethereum) {
+                web3 = new Web3(window.ethereum);
+                try {
+                    // Request account access
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    userAccount = accounts[0];
+                    document.getElementById('walletStatus').textContent = `Connected: ${userAccount}`;
+                    
+                    // Initialize contract
+                    contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
+                } catch (error) {
+                    console.error("User denied account access");
+                }
+            } else {
+                alert('Please install MetaMask!');
+            }
+        });
+
+        // List NFT
+        document.getElementById('listNFT').addEventListener('click', async () => {
+            if (!contract) {
+                alert('Please connect wallet first');
+                return;
+            }
+
+            const nftContract = document.getElementById('nftContractAddress').value;
+            const tokenId = document.getElementById('tokenId').value;
+            const price = web3.utils.toWei(document.getElementById('listPrice').value, 'ether');
+
+            try {
+                await contract.methods.listNFT(nftContract, tokenId, price).send({ from: userAccount });
+                alert('NFT Listed Successfully!');
+                loadListings();
+            } catch (error) {
+                console.error('Error listing NFT:', error);
+                alert('Failed to list NFT');
+            }
+        });
+
+        // Buy NFT
+        document.getElementById('buyNFT').addEventListener('click', async () => {
+            if (!contract) {
+                alert('Please connect wallet first');
+                return;
+            }
+
+            const listingId = document.getElementById('listingId').value;
+            const price = web3.utils.toWei(document.getElementById('buyPrice').value, 'ether');
+
+            try {
+                await contract.methods.buyNFT(listingId).send({ 
+                    from: userAccount, 
+                    value: price 
+                });
+                alert('NFT Purchased Successfully!');
+                loadListings();
+            } catch (error) {
+                console.error('Error buying NFT:', error);
+                alert('Failed to buy NFT');
+            }
+        });
+
+        // Load Listings
+        async function loadListings() {
+            const listingsContainer = document.getElementById('listingsContainer');
+            listingsContainer.innerHTML = ''; // Clear previous listings
+
+            try {
+                // This is a simplified example. In a real implementation, 
+                // you'd fetch listings from the contract or an indexing service
+                const listingCount = await contract.methods.listingIds().call();
+
+                for (let i = 1; i <= listingCount; i++) {
+                    const listing = await contract.methods.listings(i).call();
+                    
+                    if (listing.isActive) {
+                        const listingElement = document.createElement('div');
+                        listingElement.classList.add('nft-listing');
+                        listingElement.innerHTML = `
+                            <p>Listing ID: ${i}</p>
+                            <p>Contract: ${listing.nftContract}</p>
+                            <p>Token ID: ${listing.tokenId}</p>
+                            <p>Price: ${web3.utils.fromWei(listing.price, 'ether')} ETH</p>
+                        `;
+                        listingsContainer.appendChild(listingElement);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading listings:', error);
+            }
+        }
+
+        // Add event listener to load listings when wallet connects
+        document.getElementById('connectWallet').addEventListener('click', loadListings);
+    </script>
+</body>
+</html>
